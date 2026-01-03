@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+asyncpg
+psycopg2-binary
+geoalchemy2
+python-dotenv
+shapely
+python-multipart
