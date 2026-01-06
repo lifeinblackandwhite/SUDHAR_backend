@@ -7,6 +7,8 @@ services:
       - "8000:8000"
     depends_on:
       - postgres
+    volumes:
+      - ./uploads:/code/uploads
 
   postgres:
     image: postgis/postgis:15-3.3

@@ -22,4 +22,4 @@ async def db_test(db: AsyncSession = Depends(get_db)):
     value = result.scalar()
     return {"db_connected": value == 1}
 
-app.include_router(issue_router, prefix="/issues", tags=["Issues"])
+app.include_router(issue_router)
