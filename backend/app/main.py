@@ -4,6 +4,7 @@ from app.db.database import get_db, engine, Base
 from app.db import models
 from app.db.schemas import *
 from app.api.routes.issue_routes import router as issue_router
+from app.db.database import engine
 
 app = FastAPI()
 
@@ -11,6 +12,9 @@ app = FastAPI()
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(models.Base.metadata.create_all)
 
 @app.get("/")
 def home():
