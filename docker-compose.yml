@@ -9,6 +9,8 @@ services:
       - postgres
     volumes:
       - ./uploads:/code/uploads
+      - ./backend/firebase_service_account.json:/code/firebase_service_account.json:ro
+
 
   postgres:
     image: postgis/postgis:15-3.3

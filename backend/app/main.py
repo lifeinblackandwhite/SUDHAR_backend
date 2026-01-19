@@ -5,8 +5,21 @@ from app.db import models
 from app.db.schemas import *
 from app.api.routes.issue_routes import router as issue_router
 from app.db.database import engine
+from app.api.routes.verification_routes import router as verification_router
+
+from app.api.routes.community_feed import router as community_feed_router
+from app.api.ws.community_ws import router as community_ws_router
+
+from app.api.routes.community_feed import router as community_feed_router
+
 
 app = FastAPI()
+
+app.include_router(community_feed_router)
+app.include_router(community_ws_router)
+
+
+app.include_router(verification_router)
 
 @app.on_event("startup")
 async def init_db():

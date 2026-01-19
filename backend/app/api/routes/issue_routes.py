@@ -6,7 +6,14 @@ from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 import os
 
+from app.core.issue_states import IssueState
+from app.services.abuse_decision import abuse_decision
+
 from app.services.audit_logger import log_event
+
+from app.core.issue_states import IssueState
+from app.services.notification_service import notify_community
+
 
 router = APIRouter(prefix="/issues", tags=["Issues"])
 
@@ -17,7 +24,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload")
 async def upload_issue(
-    request: Request,  # ✅ REQUIRED for audit logging
+    request: Request,
+    title: str = Form(...),
     description: str = Form(...),
     category: str = Form(...),
     state: str = Form(...),
@@ -29,44 +37,64 @@ async def upload_issue(
     images: list[UploadFile] | None = File(None),
     db: AsyncSession = Depends(get_db)
 ):
-    # 🔹 Create PostGIS point (lon, lat order is IMPORTANT)
     point = from_shape(Point(longitude, latitude), srid=4326)
 
-    # 🔹 Create Issue
+    # 1️⃣ Create issue (initial state)
     new_issue = Issue(
+        title=title,
         description=description,
         category=category,
         state=state,
         city=city,
         area=area,
         pincode=pincode,
-        location=point
+        location=point,
+        status=IssueState.SUBMITTED.value,
+        abuse_cleared=False
     )
 
     db.add(new_issue)
-    await db.flush()  # ✅ ensures new_issue.id exists
+    await db.flush()  # ensures ID exists
 
-    # 🔹 Audit log: ISSUE CREATED
+    # 2️⃣ Run abuse prevention (Java service)
+    is_clean = await abuse_decision(new_issue)
+
+    if not is_clean:
+        # ❌ Auto reject
+        new_issue.status = IssueState.AUTO_REJECTED.value
+
+        await log_event(
+            db=db,
+            issue_id=new_issue.id,
+            actor_type="system",
+            actor_id=None,
+            action="AUTO_REJECTED",
+            new_value={"reason": "abuse_detection"},
+        )
+
+        await db.commit()
+        return {
+            "status": "rejected",
+            "reason": "abuse_detected"
+        }
+
+    # 3️⃣ Abuse PASSED → mark cleared
+    new_issue.abuse_cleared = True
+    new_issue.status = IssueState.UNDER_VERIFICATION.value
+
+    # 4️⃣ Audit log
     await log_event(
         db=db,
         issue_id=new_issue.id,
-        actor_type="citizen",
-        actor_id=None,  # 🔒 later: Firebase UID
-        action="ISSUE_CREATED",
-        old_value=None,
-        new_value={
-            "description": description,
-            "category": category,
-            "location": {
-                "latitude": latitude,
-                "longitude": longitude
-            }
-        },
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent")
+        actor_type="system",
+        actor_id=None,
+        action="UNDER_VERIFICATION",
     )
 
-    # 🔹 Save images (if any)
+    # 5️⃣ Notify community (NOW it is allowed)
+    await notify_community(new_issue)
+
+    # 6️⃣ Save images
     if images:
         for img in images:
             safe_filename = f"{new_issue.id}_{img.filename}"
@@ -88,3 +116,4 @@ async def upload_issue(
         "status": "success",
         "issue_id": new_issue.id
     }
+

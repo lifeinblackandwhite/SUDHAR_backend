@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 class IssueCreate(BaseModel):
+    title: str
     description: str
     category: str
     state: Optional[str]

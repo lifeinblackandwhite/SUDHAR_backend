@@ -12,3 +12,6 @@ pillow
 imagehash
 numpy
 scipy
+firebase-admin
+websockets
+pydantic[email]
