@@ -7,6 +7,11 @@ geoalchemy2
 python-dotenv
 shapely
 python-multipart
+flask
+pillow
+imagehash
+numpy
+scipy
 firebase-admin
 websockets
 pydantic[email]
