@@ -1,83 +1,74 @@
+"""
+Configuration for the Abuse Prevention module.
+Uses the existing PostgreSQL database from docker-compose.
+"""
+
+import os
+from dotenv import load_dotenv
+
 load_dotenv()
 
+
 class Config:
-    """Base configuration."""
+    """Configuration settings for abuse prevention."""
     
-    # Database
-    DATABASE_PATH = os.getenv('DATABASE_PATH', 'sudhar.db')
+    # Database - uses existing PostgreSQL from docker-compose
+    DATABASE_URL = os.getenv(
+        'DATABASE_URL',
+        'postgresql://postgres:postgres@postgres:5432/infra_db'
+    )
     
-    # Flask
-    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16MB
+    # For local development (outside Docker)
+    DATABASE_URL_LOCAL = os.getenv(
+        'DATABASE_URL_LOCAL',
+        'postgresql://postgres:postgres@localhost:5433/infra_db'
+    )
+    
+    # Validation thresholds
+    MAX_PHOTO_AGE_HOURS = int(os.getenv('MAX_PHOTO_AGE_HOURS', 24))
+    GPS_MAX_DISTANCE_KM = float(os.getenv('GPS_MAX_DISTANCE_KM', 0.5))
+    AI_DETECTION_THRESHOLD = float(os.getenv('AI_DETECTION_THRESHOLD', 0.7))
+    DUPLICATE_HAMMING_THRESHOLD = int(os.getenv('DUPLICATE_HAMMING_THRESHOLD', 5))
     
     # Upload settings
+    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16MB
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
-    ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
+    ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
     
-    # Abuse Prevention
-    VERIFICATION_THRESHOLD = int(os.getenv('VERIFICATION_THRESHOLD', 3))
-    DUPLICATE_HAMMING_THRESHOLD = int(os.getenv('DUPLICATE_HAMMING_THRESHOLD', 5))
-    PHOTO_SIMILARITY_MIN = int(os.getenv('PHOTO_SIMILARITY_MIN', 10))
-    PHOTO_SIMILARITY_MAX = int(os.getenv('PHOTO_SIMILARITY_MAX', 25))
-    
-    # GPS Settings
-    GPS_PROXIMITY_KM = float(os.getenv('GPS_PROXIMITY_KM', 0.1))  # 100 meters
-    NEARBY_RADIUS_KM = float(os.getenv('NEARBY_RADIUS_KM', 5.0))  # 5 km
-    
-    # Time Settings
-    MAX_PHOTO_AGE_HOURS = int(os.getenv('MAX_PHOTO_AGE_HOURS', 24))
-    RECENT_PHOTO_HOURS = int(os.getenv('RECENT_PHOTO_HOURS', 1))
-    
-    # Scoring
-    SCORE_GPS_MATCH = int(os.getenv('SCORE_GPS_MATCH', 50))
-    SCORE_GPS_MISMATCH = int(os.getenv('SCORE_GPS_MISMATCH', -40))
-    SCORE_NO_GPS = int(os.getenv('SCORE_NO_GPS', -20))
-    SCORE_NO_EXIF = int(os.getenv('SCORE_NO_EXIF', -30))
-    SCORE_RECENT_PHOTO = int(os.getenv('SCORE_RECENT_PHOTO', 30))
-    SCORE_PHOTO_24H = int(os.getenv('SCORE_PHOTO_24H', 10))
-    SCORE_OLD_PHOTO = int(os.getenv('SCORE_OLD_PHOTO', -20))
-    SCORE_CAMERA_META = int(os.getenv('SCORE_CAMERA_META', 10))
-    SCORE_DUPLICATE = int(os.getenv('SCORE_DUPLICATE', -60))
-    SCORE_FAKE_THRESHOLD = int(os.getenv('SCORE_FAKE_THRESHOLD', -50))
-    
-    # Firebase Cloud Messaging
-    FCM_ENABLED = os.getenv('FCM_ENABLED', 'false').lower() == 'true'
-    GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-    
-    # WebSocket
-    WEBSOCKET_ENABLED = os.getenv('WEBSOCKET_ENABLED', 'false').lower() == 'true'
-    WEBSOCKET_URL = os.getenv('WEBSOCKET_URL', 'http://localhost:3000')
+    # External APIs (optional - for future integration)
+    TINEYE_API_KEY = os.getenv('TINEYE_API_KEY')
+    AI_DETECTION_API_KEY = os.getenv('AI_DETECTION_API_KEY')
     
     # Logging
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-    LOG_FILE = os.getenv('LOG_FILE', 'sudhar.log')
     
-    # Security
-    ENABLE_RATE_LIMITING = os.getenv('ENABLE_RATE_LIMITING', 'true').lower() == 'true'
-    RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', 60))
-    
-    # API
+    # API settings
     API_VERSION = 'v1'
     API_PREFIX = f'/api/{API_VERSION}'
+    
+    @classmethod
+    def is_allowed_file(cls, filename: str) -> bool:
+        """Check if file extension is allowed."""
+        return '.' in filename and \
+               filename.rsplit('.', 1)[1].lower() in cls.ALLOWED_EXTENSIONS
 
 
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
-    TESTING = False
+    # Use local database URL for development outside Docker
+    DATABASE_URL = Config.DATABASE_URL_LOCAL
 
 
 class ProductionConfig(Config):
     """Production configuration."""
     DEBUG = False
-    TESTING = False
 
 
 class TestingConfig(Config):
     """Testing configuration."""
     DEBUG = True
     TESTING = True
-    DATABASE_PATH = ':memory:'
 
 
 # Configuration dictionary
@@ -85,12 +76,20 @@ config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
     'testing': TestingConfig,
-    'default': DevelopmentConfig
+    'default': Config
 }
 
 
-def get_config(env=None):
-    """Get configuration based on environment."""
+def get_config(env: str = None) -> Config:
+    """
+    Get configuration based on environment.
+    
+    Args:
+        env: Environment name (development, production, testing)
+        
+    Returns:
+        Configuration class
+    """
     if env is None:
-        env = os.getenv('FLASK_ENV', 'development')
+        env = os.getenv('FLASK_ENV', 'default')
     return config.get(env, config['default'])
