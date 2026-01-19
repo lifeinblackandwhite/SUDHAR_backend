@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
 from geoalchemy2 import Geography
@@ -9,6 +9,7 @@ class Issue(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String, nullable=True)   # firebase uid later
+    title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     category = Column(String, nullable=False)
 
@@ -19,8 +20,14 @@ class Issue(Base):
 
     location = Column(Geography(geometry_type="POINT", srid=4326))
 
-    status = Column(String, default="Pending Verification")
+    status = Column(String, default="SUBMITTED", index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+     # ✅ ADD THIS
+    abuse_cleared = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 
 
 class IssueMedia(Base):
@@ -53,3 +60,28 @@ class IssueEvent(Base):
     user_agent = Column(String, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class IssueVerification(Base):
+    __tablename__ = "issue_verifications"
+
+    id = Column(Integer, primary_key=True)
+    issue_id = Column(Integer, ForeignKey("issues.id", ondelete="CASCADE"))
+    verifier_id = Column(String, nullable=False)  # firebase UID later
+    vote = Column(String, nullable=False)  # CONFIRM | DENY
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class GovtOfficial(Base):
+    __tablename__ = "GOVTOFFICIALS"
+
+    sso = Column(String, primary_key=True, index=True)  # Single Sign-On ID
+
+    name = Column(String, nullable=False)
+    department = Column(String, nullable=False)
+    email = Column(String, nullable=False, unique=True)
+
+    state = Column(String, nullable=False)
+    city = Column(String, nullable=False)
+
+    category = Column(String, nullable=False)
+    # e.g. sanitation, roads, electricity, water, etc.

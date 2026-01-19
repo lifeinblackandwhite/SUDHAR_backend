@@ -7,3 +7,6 @@ geoalchemy2
 python-dotenv
 shapely
 python-multipart
+firebase-admin
+websockets
+pydantic[email]
