@@ -6,8 +6,9 @@ from app.db.schemas import *
 from app.api.routes.issue_routes import router as issue_router
 from app.db.database import engine
 
-# Import dynamic ranking router
+# Import dynamic ranking routers
 from dynamicranking.api import router as ranking_router
+from dynamicranking.ws_routes import router as ranking_ws_router
 
 app = FastAPI()
 
@@ -31,4 +32,6 @@ async def db_test(db: AsyncSession = Depends(get_db)):
 
 app.include_router(issue_router)
 app.include_router(ranking_router)
+app.include_router(ranking_ws_router)  # WebSocket for real-time ranking
+
 
