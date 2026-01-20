@@ -8,16 +8,12 @@ import os
 
 from app.core.issue_states import IssueState
 from app.services.abuse_decision import abuse_decision
-
 from app.services.audit_logger import log_event
-
-from app.core.issue_states import IssueState
 from app.services.notification_service import notify_community
-
+from app.services.issue_state_service import change_issue_state
 
 router = APIRouter(prefix="/issues", tags=["Issues"])
 
-# 🔹 Absolute path INSIDE container
 UPLOAD_DIR = "/code/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -37,10 +33,15 @@ async def upload_issue(
     images: list[UploadFile] | None = File(None),
     db: AsyncSession = Depends(get_db)
 ):
+    # --------------------------------------------------
+    # 1️⃣ Create geometry
+    # --------------------------------------------------
     point = from_shape(Point(longitude, latitude), srid=4326)
 
-    # 1️⃣ Create issue (initial state)
-    new_issue = Issue(
+    # --------------------------------------------------
+    # 2️⃣ Create Issue (SUBMITTED)
+    # --------------------------------------------------
+    issue = Issue(
         title=title,
         description=description,
         category=category,
@@ -53,67 +54,82 @@ async def upload_issue(
         abuse_cleared=False
     )
 
-    db.add(new_issue)
-    await db.flush()  # ensures ID exists
+    db.add(issue)
+    await db.flush()  # ID guaranteed here
 
-    # 2️⃣ Run abuse prevention (Java service)
-    is_clean = await abuse_decision(new_issue)
+    # --------------------------------------------------
+    # 3️⃣ Read image for abuse prevention
+    # --------------------------------------------------
+    image_bytes = None
+    if images:
+        image_bytes = await images[0].read()
+        images[0].file.seek(0)
+
+    # -------------------------------------------------- 
+    # 4️⃣ Abuse prevention
+    # --------------------------------------------------
+    is_clean = await abuse_decision(issue, image_bytes, latitude=latitude, longitude=longitude)
 
     if not is_clean:
-        # ❌ Auto reject
-        new_issue.status = IssueState.AUTO_REJECTED.value
+        change_issue_state(
+            issue=issue,
+            new_state=IssueState.AUTO_REJECTED
+        )
 
         await log_event(
             db=db,
-            issue_id=new_issue.id,
+            issue_id=issue.id,
             actor_type="system",
             actor_id=None,
             action="AUTO_REJECTED",
-            new_value={"reason": "abuse_detection"},
+            new_value={"reason": "abuse_prevention"},
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
         )
 
         await db.commit()
-        return {
-            "status": "rejected",
-            "reason": "abuse_detected"
-        }
+        return {"status": "rejected", "reason": "abuse_detected"}
 
-    # 3️⃣ Abuse PASSED → mark cleared
-    new_issue.abuse_cleared = True
-    new_issue.status = IssueState.UNDER_VERIFICATION.value
+    # --------------------------------------------------
+    # 5️⃣ Passed abuse prevention
+    # --------------------------------------------------
+    issue.abuse_cleared = True
 
-    # 4️⃣ Audit log
+    change_issue_state(
+        issue=issue,
+        new_state=IssueState.UNDER_VERIFICATION
+    )
+
     await log_event(
         db=db,
-        issue_id=new_issue.id,
+        issue_id=issue.id,
         actor_type="system",
         actor_id=None,
         action="UNDER_VERIFICATION",
     )
 
-    # 5️⃣ Notify community (NOW it is allowed)
-    await notify_community(new_issue)
-
+    # --------------------------------------------------
     # 6️⃣ Save images
+    # --------------------------------------------------
     if images:
         for img in images:
-            safe_filename = f"{new_issue.id}_{img.filename}"
-            filepath = os.path.join(UPLOAD_DIR, safe_filename)
+            path = os.path.join(UPLOAD_DIR, f"{issue.id}_{img.filename}")
+            with open(path, "wb") as f:
+                f.write(await img.read())
 
-            with open(filepath, "wb") as buffer:
-                buffer.write(await img.read())
+            db.add(IssueMedia(issue_id=issue.id, file_path=path))
 
-            db.add(
-                IssueMedia(
-                    issue_id=new_issue.id,
-                    file_path=filepath
-                )
-            )
-
+    # --------------------------------------------------
+    # 7️⃣ COMMIT (single source of truth)
+    # --------------------------------------------------
     await db.commit()
+
+    # --------------------------------------------------
+    # 8️⃣ Notify AFTER commit
+    # --------------------------------------------------
+    await notify_community(issue)
 
     return {
         "status": "success",
-        "issue_id": new_issue.id
+        "issue_id": issue.id
     }
-

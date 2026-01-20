@@ -5,7 +5,7 @@ from app.db.models import Issue, IssueVerification
 from app.services.community_decision import community_decision
 from app.services.audit_logger import log_event
 
-router = APIRouter(prefix="/verify", tags=["Community Verification"])
+router = APIRouter(prefix="/community/verify", tags=["Community Verification"])
 
 @router.post("/{issue_id}")
 async def verify_issue(

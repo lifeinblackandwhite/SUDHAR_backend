@@ -3,6 +3,8 @@ from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
 from geoalchemy2 import Geography
 from .database import Base
+from app.db.audit_models import AuditLog
+
 
 class Issue(Base):
     __tablename__ = "issues"
@@ -66,8 +68,10 @@ class IssueVerification(Base):
 
     id = Column(Integer, primary_key=True)
     issue_id = Column(Integer, ForeignKey("issues.id", ondelete="CASCADE"))
-    verifier_id = Column(String, nullable=False)  # firebase UID later
-    vote = Column(String, nullable=False)  # CONFIRM | DENY
+    verifier_id = Column(String, nullable=False)  # firebase UID
+    vote = Column(String, nullable=True)  # CONFIRM | DENY - set later after evaluation
+    description = Column(Text, nullable=True)
+    image_path = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

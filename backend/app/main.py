@@ -1,23 +1,29 @@
 from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db, engine, Base
 from app.db import models
 from app.db.schemas import *
 from app.api.routes.issue_routes import router as issue_router
 from app.db.database import engine
-from app.api.routes.verification_routes import router as verification_router
+from app.api.routes.community_verification import router as verification_router
+from app.api.routes.official_routes import router as official_router
 
 from app.api.routes.community_feed import router as community_feed_router
 from app.api.ws.community_ws import router as community_ws_router
 
 from app.api.routes.community_feed import router as community_feed_router
 
+from app.db import audit_models
 
 app = FastAPI()
 
+# Serve uploaded images as static files
+app.mount("/uploads", StaticFiles(directory="/code/uploads"), name="uploads")
+
 app.include_router(community_feed_router)
 app.include_router(community_ws_router)
-
+app.include_router(official_router)
 
 app.include_router(verification_router)
 
