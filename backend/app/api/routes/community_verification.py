@@ -1,16 +1,21 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.db.database import get_db
 from app.db.models import Issue, IssueVerification
 from app.core.issue_states import IssueState
 from app.services.audit_logger import log_event
+from app.services.issue_state_service import change_issue_state
+from dynamicranking.service import DynamicRankingService
 import os
 
 router = APIRouter(prefix="/community", tags=["Community"])
 
 VERIFY_UPLOAD_DIR = "/code/uploads/verifications"
 os.makedirs(VERIFY_UPLOAD_DIR, exist_ok=True)
+
+# Community verification threshold
+VERIFICATION_THRESHOLD = 2
 
 
 @router.post("/verify/{issue_id}")
@@ -89,12 +94,51 @@ async def verify_issue(
         }
     )
 
-    await db.commit()
+    # --------------------------------------------------
+    # ✅ Check verification threshold
+    # --------------------------------------------------
+    verification_count_result = await db.execute(
+        select(func.count(IssueVerification.id))
+        .where(IssueVerification.issue_id == issue_id)
+    )
+    # Add 1 because current verification isn't committed yet
+    total_verifications = verification_count_result.scalar() + 1
 
-    # ❗ STATE CHANGE IS DELIBERATELY NOT DONE HERE
-    # Similarity + threshold logic will decide later
+    if total_verifications >= VERIFICATION_THRESHOLD:
+        # Change status to VERIFIED
+        change_issue_state(
+            issue=issue,
+            new_state=IssueState.VERIFIED
+        )
+
+        # Calculate priority score using dynamic ranking service
+        ranking_service = DynamicRankingService()
+        scores = ranking_service.calculate_priority_score(
+            category=issue.category,
+            verification_count=total_verifications,
+            created_at=issue.created_at,
+            status="Verified"
+        )
+        issue.priority_score = scores['priority_score']
+
+        # Log state transition
+        await log_event(
+            db=db,
+            issue_id=issue.id,
+            actor_type="system",
+            actor_id=None,
+            action="COMMUNITY_VERIFIED",
+            new_value={
+                "verification_count": total_verifications,
+                "priority_score": scores['priority_score']
+            }
+        )
+
+    await db.commit()
 
     return {
         "status": "verification_submitted",
-        "issue_id": issue_id
+        "issue_id": issue_id,
+        "verification_count": total_verifications,
+        "community_verified": total_verifications >= VERIFICATION_THRESHOLD
     }

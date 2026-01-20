@@ -6,6 +6,7 @@ COPY requirements.txt /code/
 RUN pip install --no-cache-dir -r /code/requirements.txt
 
 COPY ./app /code/app
+COPY ./dynamicranking /code/dynamicranking
 
 ENV PYTHONPATH=/code
 

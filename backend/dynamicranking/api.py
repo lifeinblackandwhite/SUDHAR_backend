@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 
 from .service import DynamicRankingService, RankedIssue, get_category_severities
 from .config import RankingConfig, SEVERITY_SCORES
+from app.db.database import get_db
 
 router = APIRouter(prefix="/ranking", tags=["Dynamic Ranking"])
 
@@ -22,7 +23,7 @@ async def get_ranked_issues(
     state: Optional[str] = Query(None, description="Filter by state"),
     city: Optional[str] = Query(None, description="Filter by city"),
     category: Optional[str] = Query(None, description="Filter by category"),
-    db: AsyncSession = None  # Inject via Depends(get_db) in main app
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get issues ranked by priority for government officials.

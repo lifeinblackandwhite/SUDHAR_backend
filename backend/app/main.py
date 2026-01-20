@@ -13,6 +13,7 @@ from app.api.routes.community_feed import router as community_feed_router
 from app.api.ws.community_ws import router as community_ws_router
 
 from app.api.routes.community_feed import router as community_feed_router
+from app.api.routes.official_issues import router as official_issues_router
 
 from app.db import audit_models
 
@@ -27,6 +28,7 @@ app.mount("/uploads", StaticFiles(directory="/code/uploads"), name="uploads")
 app.include_router(community_feed_router)
 app.include_router(community_ws_router)
 app.include_router(official_router)
+app.include_router(official_issues_router)
 
 app.include_router(verification_router)
 

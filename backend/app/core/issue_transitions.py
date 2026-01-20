@@ -8,6 +8,8 @@ ISSUE_TRANSITIONS = {
     IssueState.UNDER_VERIFICATION: {
         IssueState.COMMUNITY_REJECTED,
         IssueState.VERIFIED,
+        IssueState.AUTO_REJECTED,
+        IssueState.COMMUNITY_REVIEW,
     },
     IssueState.VERIFIED: {
         IssueState.RANKED,
@@ -21,21 +23,17 @@ ISSUE_TRANSITIONS = {
     },
     IssueState.RESOLVED: {
         IssueState.CLOSED,
-    },  
+    },
     IssueState.RANKED: {
         IssueState.ASSIGNED,
     },
-    IssueState.UNDER_VERIFICATION: {
-    IssueState.AUTO_REJECTED,
-    IssueState.COMMUNITY_REVIEW,
-},
-IssueState.COMMUNITY_REVIEW: {
-    IssueState.VERIFIED,
-    IssueState.COMMUNITY_REJECTED,
-},
-
+    IssueState.COMMUNITY_REVIEW: {
+        IssueState.VERIFIED,
+        IssueState.COMMUNITY_REJECTED,
+    },
 }
 
 
 def is_valid_transition(current, next_):
     return next_ in ISSUE_TRANSITIONS.get(current, set())
+

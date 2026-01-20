@@ -133,3 +133,46 @@ async def upload_issue(
         "status": "success",
         "issue_id": issue.id
     }
+
+
+@router.get("/{issue_id}")
+async def get_issue_by_id(
+    issue_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get issue details by ID including images.
+    """
+    from sqlalchemy import select
+    
+    issue = await db.get(Issue, issue_id)
+    
+    if not issue:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Issue not found")
+    
+    # Get images for this issue
+    media_result = await db.execute(
+        select(IssueMedia).where(IssueMedia.issue_id == issue_id)
+    )
+    media_items = media_result.scalars().all()
+    
+    image_urls = []
+    for media in media_items:
+        filename = media.file_path.split("/")[-1]
+        image_urls.append(f"/uploads/{filename}")
+    
+    return {
+        "id": issue.id,
+        "title": issue.title,
+        "description": issue.description,
+        "category": issue.category,
+        "state": issue.state,
+        "city": issue.city,
+        "area": issue.area,
+        "pincode": issue.pincode,
+        "status": issue.status,
+        "priority_score": round(issue.priority_score, 2) if issue.priority_score else 0,
+        "created_at": issue.created_at.isoformat() if issue.created_at else None,
+        "images": image_urls,
+    }

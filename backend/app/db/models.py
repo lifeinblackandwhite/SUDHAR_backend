@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Boolean, Float
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
 from geoalchemy2 import Geography
@@ -25,8 +25,10 @@ class Issue(Base):
     status = Column(String, default="SUBMITTED", index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-     # ✅ ADD THIS
     abuse_cleared = Column(Boolean, default=False, nullable=False)
+    
+    # Priority score calculated by dynamic ranking service
+    priority_score = Column(Float, default=0.0, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
