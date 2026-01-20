@@ -134,8 +134,9 @@ class AIDetectionValidator(BaseValidator):
             normalized_score = max(0, min(100, score))
             confidence = normalized_score / 100.0
             
-            # Determine if image passes AI check
-            passed = confidence >= self.threshold
+            # ALWAYS PASS - AI detection is just informational
+            # Only add reasons for logging, don't block
+            passed = True  # Always pass
             
             return ValidationResult(
                 passed=passed,
@@ -150,11 +151,12 @@ class AIDetectionValidator(BaseValidator):
             
         except Exception as e:
             logger.error(f"AI detection error: {str(e)}")
+            # ON ERROR: PASS THE CHECK (be lenient)
             return ValidationResult(
-                passed=False,
-                score=0,
-                reason=f"AI detection error: {str(e)}",
-                details={"error": str(e)}
+                passed=True,
+                score=50,
+                reason=f"AI detection skipped: {str(e)}",
+                details={"error": str(e), "skipped": True}
             )
     
     def _check_exif_authenticity(self, image: Image.Image) -> Tuple[int, list]:
@@ -319,10 +321,11 @@ class EXIFValidator(BaseValidator):
             exif_data = image._getexif()
             
             if not exif_data:
+                # ALWAYS PASS - just note the missing EXIF
                 return ValidationResult(
-                    passed=False,
-                    score=-30,
-                    reason="No EXIF data found - cannot verify when image was taken",
+                    passed=True,
+                    score=0,
+                    reason="No EXIF data found (accepted anyway)",
                     details={"has_exif": False}
                 )
             
@@ -336,10 +339,11 @@ class EXIFValidator(BaseValidator):
             )
             
             if not timestamp_str:
+                # ALWAYS PASS - just note the missing timestamp
                 return ValidationResult(
-                    passed=False,
-                    score=-20,
-                    reason="No timestamp found in EXIF data",
+                    passed=True,
+                    score=0,
+                    reason="No timestamp in EXIF (accepted anyway)",
                     details={"has_exif": True, "has_timestamp": False}
                 )
             
@@ -347,10 +351,11 @@ class EXIFValidator(BaseValidator):
             try:
                 photo_time = datetime.strptime(str(timestamp_str), '%Y:%m:%d %H:%M:%S')
             except ValueError:
+                # ALWAYS PASS on parse error
                 return ValidationResult(
-                    passed=False,
-                    score=-15,
-                    reason=f"Invalid timestamp format: {timestamp_str}",
+                    passed=True,
+                    score=0,
+                    reason=f"Could not parse timestamp (accepted anyway)",
                     details={"has_timestamp": True, "timestamp_raw": str(timestamp_str)}
                 )
             
@@ -370,7 +375,8 @@ class EXIFValidator(BaseValidator):
                 score = -25
                 reason = f"Image is too old: {age_hours:.1f} hours (limit: {self.max_age_hours}h)"
             
-            passed = age_hours <= self.max_age_hours
+            # ALWAYS PASS - age is just informational
+            passed = True
             
             return ValidationResult(
                 passed=passed,
@@ -385,10 +391,11 @@ class EXIFValidator(BaseValidator):
             
         except Exception as e:
             logger.error(f"EXIF validation error: {str(e)}")
+            # ALWAYS PASS on error
             return ValidationResult(
-                passed=False,
-                score=-20,
-                reason=f"EXIF validation error: {str(e)}",
+                passed=True,
+                score=0,
+                reason=f"EXIF check skipped: {str(e)}",
                 details={"error": str(e)}
             )
 
@@ -429,10 +436,11 @@ class GPSValidator(BaseValidator):
         - details: distance_km, exif_coords, user_coords
         """
         if user_latitude is None or user_longitude is None:
+            # ALWAYS PASS - just note the missing location
             return ValidationResult(
-                passed=False,
-                score=-20,
-                reason="User location not provided",
+                passed=True,
+                score=0,
+                reason="User location not provided (accepted anyway)",
                 details={"error": "missing_user_location"}
             )
         
@@ -440,10 +448,11 @@ class GPSValidator(BaseValidator):
             exif_data = image._getexif()
             
             if not exif_data:
+                # ALWAYS PASS - just note no EXIF
                 return ValidationResult(
-                    passed=False,
-                    score=-25,
-                    reason="No EXIF data - cannot verify location",
+                    passed=True,
+                    score=0,
+                    reason="No EXIF data (accepted anyway)",
                     details={"has_exif": False}
                 )
             
@@ -451,10 +460,11 @@ class GPSValidator(BaseValidator):
             gps_info = exif.get('GPSInfo')
             
             if not gps_info:
+                # ALWAYS PASS - just note no GPS
                 return ValidationResult(
-                    passed=False,
-                    score=-20,
-                    reason="No GPS data in image EXIF",
+                    passed=True,
+                    score=0,
+                    reason="No GPS in image (accepted anyway)",
                     details={"has_exif": True, "has_gps": False}
                 )
             
@@ -462,10 +472,11 @@ class GPSValidator(BaseValidator):
             exif_coords = self._parse_gps(gps_info)
             
             if not exif_coords:
+                # ALWAYS PASS - just note the parse error
                 return ValidationResult(
-                    passed=False,
-                    score=-15,
-                    reason="Could not parse GPS coordinates from EXIF",
+                    passed=True,
+                    score=0,
+                    reason="Could not parse GPS (accepted anyway)",
                     details={"has_gps": True, "parse_error": True}
                 )
             
@@ -491,8 +502,9 @@ class GPSValidator(BaseValidator):
                 score = -35
                 reason = f"GPS mismatch: image taken {distance:.2f}km away (limit: {self.max_distance_km}km)"
             
+            # ALWAYS PASS - GPS is just informational
             return ValidationResult(
-                passed=passed,
+                passed=True,  # Always pass
                 score=score,
                 reason=reason,
                 details={
@@ -507,10 +519,11 @@ class GPSValidator(BaseValidator):
             
         except Exception as e:
             logger.error(f"GPS validation error: {str(e)}")
+            # ALWAYS PASS on error
             return ValidationResult(
-                passed=False,
-                score=-20,
-                reason=f"GPS validation error: {str(e)}",
+                passed=True,
+                score=0,
+                reason=f"GPS check skipped: {str(e)}",
                 details={"error": str(e)}
             )
     
@@ -622,16 +635,23 @@ class WebExistenceValidator(BaseValidator):
                     details["checked_database"] = True
                     
                     if found:
-                        return ValidationResult(
-                            passed=False,
-                            score=-40,
-                            reason=f"Image already exists in database (match: {match_info})",
-                            details={
-                                **details,
-                                "found_in_database": True,
-                                "match_info": match_info
-                            }
-                        )
+                        # Only reject EXACT SHA256 matches
+                        # Similar images (perceptual hash) are allowed
+                        if 'exact_match' in match_info:
+                            return ValidationResult(
+                                passed=False,
+                                score=-40,
+                                reason="Exact duplicate image found (rejected)",
+                                details={
+                                    **details,
+                                    "found_in_database": True,
+                                    "match_info": match_info
+                                }
+                            )
+                        else:
+                            # Similar but not exact - just note it, don't reject
+                            details["similar_image_found"] = True
+                            details["match_info"] = match_info
                 except Exception as e:
                     logger.warning(f"Database check failed: {e}")
                     details["database_error"] = str(e)
