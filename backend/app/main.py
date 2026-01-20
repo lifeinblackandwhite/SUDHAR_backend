@@ -16,6 +16,9 @@ from app.api.routes.community_feed import router as community_feed_router
 
 from app.db import audit_models
 
+# Import dynamic ranking router
+from dynamicranking.api import router as ranking_router
+
 app = FastAPI()
 
 # Serve uploaded images as static files
@@ -46,3 +49,5 @@ async def db_test(db: AsyncSession = Depends(get_db)):
     return {"db_connected": value == 1}
 
 app.include_router(issue_router)
+app.include_router(ranking_router)
+
