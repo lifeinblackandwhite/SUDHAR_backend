@@ -45,7 +45,7 @@ class AbusePreventionLayer:
         """
         result = {
             'is_valid': True,
-            'score': 0,
+            'score': 50,  # Start with positive score - assume valid until proven otherwise
             'reasons': [],
             'exif_data': {},
             'phash': None
@@ -70,8 +70,9 @@ class AbusePreventionLayer:
             result['score'] += duplicate_check['score']
             result['reasons'].extend(duplicate_check['reasons'])
             
-            # Determine if image is valid (score >= 0 means valid)
-            if result['score'] < -50:
+            # Determine if image is valid
+            # Only reject if score is very negative (multiple red flags)
+            if result['score'] < -30:
                 result['is_valid'] = False
                 result['classification'] = 'FAKE'
             elif duplicate_check['is_duplicate']:
@@ -107,11 +108,19 @@ class AbusePreventionLayer:
         }
         
         try:
-            exif_data = image._getexif()
+            # Try multiple methods to get EXIF data
+            exif_data = None
+            try:
+                if hasattr(image, '_getexif'):
+                    exif_data = image._getexif()
+                if not exif_data and hasattr(image, 'getexif'):
+                    exif_data = dict(image.getexif()) if image.getexif() else None
+            except:
+                pass
             
             if not exif_data:
-                result['score'] -= 30
-                result['reasons'].append("No EXIF data found")
+                result['score'] -= 15  # Reduced penalty - many valid phone photos lack EXIF
+                result['reasons'].append("No EXIF data found (this is common for screenshots or shared images)")
                 return result
             
             # Parse EXIF data
@@ -133,7 +142,7 @@ class AbusePreventionLayer:
                 gps_coords = self._parse_gps(gps_info)
                 result['exif_data']['GPS'] = gps_coords
                 
-                # Validate GPS proximity (within ~100 meters)
+                # Validate GPS proximity (within ~500 meters - accounts for GPS inaccuracy)
                 if gps_coords and expected_gps:
                     distance = self._calculate_distance(
                         gps_coords['latitude'],
@@ -142,15 +151,18 @@ class AbusePreventionLayer:
                         expected_gps['longitude']
                     )
                     
-                    if distance < 0.1:  # Within 100 meters
-                        result['score'] += 50
-                        result['reasons'].append("GPS location matches")
+                    if distance < 0.5:  # Within 500 meters (GPS can be inaccurate by 10-100m)
+                        result['score'] += 30
+                        result['reasons'].append(f"GPS location matches (within {distance*1000:.0f}m)")
+                    elif distance < 2.0:  # Within 2km - might be nearby
+                        result['score'] += 10
+                        result['reasons'].append(f"GPS location nearby ({distance:.1f}km away)")
                     else:
-                        result['score'] -= 40
+                        result['score'] -= 20  # Reduced penalty
                         result['reasons'].append(f"GPS mismatch: {distance:.2f}km away")
             else:
-                result['score'] -= 20
-                result['reasons'].append("No GPS data in EXIF")
+                result['score'] -= 10  # Reduced penalty - many phones have GPS disabled
+                result['reasons'].append("No GPS data in EXIF (GPS may be disabled on device)")
             
             # Check timestamp
             if 'DateTime' in exif:
