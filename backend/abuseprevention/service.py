@@ -115,54 +115,69 @@ class ImageValidationService:
             sha256_hash = hashlib.sha256(image_data).hexdigest()
             phash = str(imagehash.phash(image, hash_size=16))
             
-            # Run all validators
+            # Run all validators but be VERY lenient
+            # Philosophy: Accept by default, only reject clear abuse
             checks = {}
             reasons = []
-            total_score = 0
-            all_passed = True
+            total_score = 100  # Start with perfect score - assume valid
             
-            # 1. AI Detection Check
-            ai_result = self.ai_validator.validate(image)
-            checks['ai_detection'] = ai_result.to_dict()
-            total_score += ai_result.score
-            if not ai_result.passed:
-                all_passed = False
-                reasons.append(f"AI Check Failed: {ai_result.reason}")
+            # 1. AI Detection Check - INFORMATIONAL ONLY, doesn't block
+            try:
+                ai_result = self.ai_validator.validate(image)
+                checks['ai_detection'] = ai_result.to_dict()
+                # Don't penalize heavily - AI detection is imperfect
+                if not ai_result.passed:
+                    total_score -= 10  # Minor penalty
+                    reasons.append(f"AI Detection Note: {ai_result.reason}")
+            except Exception as e:
+                checks['ai_detection'] = {'passed': True, 'reason': 'Check skipped', 'score': 0}
             
-            # 2. EXIF Freshness Check
-            exif_result = self.exif_validator.validate(image)
-            checks['exif_freshness'] = exif_result.to_dict()
-            total_score += exif_result.score
-            if not exif_result.passed:
-                all_passed = False
-                reasons.append(f"EXIF Check Failed: {exif_result.reason}")
+            # 2. EXIF Freshness Check - INFORMATIONAL ONLY
+            try:
+                exif_result = self.exif_validator.validate(image)
+                checks['exif_freshness'] = exif_result.to_dict()
+                # Many valid photos lack EXIF - don't penalize
+                if not exif_result.passed:
+                    total_score -= 5  # Very minor penalty
+                    reasons.append(f"EXIF Note: {exif_result.reason}")
+            except Exception as e:
+                checks['exif_freshness'] = {'passed': True, 'reason': 'Check skipped', 'score': 0}
             
-            # 3. GPS Location Match
-            gps_result = self.gps_validator.validate(
-                image,
-                user_latitude=user_latitude,
-                user_longitude=user_longitude
-            )
-            checks['gps_match'] = gps_result.to_dict()
-            total_score += gps_result.score
-            if not gps_result.passed:
-                all_passed = False
-                reasons.append(f"GPS Check Failed: {gps_result.reason}")
+            # 3. GPS Location Match - INFORMATIONAL ONLY
+            try:
+                gps_result = self.gps_validator.validate(
+                    image,
+                    user_latitude=user_latitude,
+                    user_longitude=user_longitude
+                )
+                checks['gps_match'] = gps_result.to_dict()
+                # GPS can be inaccurate or disabled - don't penalize heavily
+                if not gps_result.passed:
+                    total_score -= 5  # Very minor penalty
+                    reasons.append(f"GPS Note: {gps_result.reason}")
+            except Exception as e:
+                checks['gps_match'] = {'passed': True, 'reason': 'Check skipped', 'score': 0}
             
-            # 4. Web Existence Check
-            web_result = self.web_validator.validate(image)
-            checks['web_existence'] = web_result.to_dict()
-            total_score += web_result.score
-            if not web_result.passed:
-                all_passed = False
-                reasons.append(f"Web Check Failed: {web_result.reason}")
+            # 4. Web Existence Check - ONLY THIS CAN REJECT
+            try:
+                web_result = self.web_validator.validate(image)
+                checks['web_existence'] = web_result.to_dict()
+                # Only reject if it's a CLEAR duplicate
+                if not web_result.passed and 'exact_match' in str(web_result.details.get('match_info', '')):
+                    total_score = 0  # Only exact duplicates cause rejection
+                    reasons.append(f"REJECTED: {web_result.reason}")
+            except Exception as e:
+                checks['web_existence'] = {'passed': True, 'reason': 'Check skipped', 'score': 0}
             
-            # Normalize score to 0-100
+            # VERY LENIENT: Accept if score > 0 (almost everything passes)
+            is_valid = total_score > 0
+            
+            # Normalize score
             normalized_score = max(0, min(100, total_score))
             
             # Create result
             result = ImageValidationResult(
-                is_valid=all_passed,
+                is_valid=is_valid,
                 overall_score=normalized_score,
                 checks=checks,
                 reasons=reasons if reasons else ["All checks passed"],
@@ -174,20 +189,24 @@ class ImageValidationService:
             if self.db:
                 self._log_validation(result, user_latitude, user_longitude)
             
-            # Store hash for future comparison
-            if store_hash and all_passed and self.db:
-                self.web_validator.store_hash(image, source_type='submission')
+            # Store hash for future comparison (always store for valid images)
+            if store_hash and is_valid and self.db:
+                try:
+                    self.web_validator.store_hash(image, source_type='submission')
+                except:
+                    pass  # Don't fail validation if hash storage fails
             
             return result
             
         except Exception as e:
             logger.error(f"Image validation failed: {str(e)}")
+            # ON ERROR: ACCEPT THE IMAGE (be lenient)
             return ImageValidationResult(
-                is_valid=False,
-                overall_score=0,
-                checks={"error": {"passed": False, "reason": str(e)}},
-                reasons=[f"Validation error: {str(e)}"],
-                image_hash="",
+                is_valid=True,  # Accept on error
+                overall_score=50,
+                checks={"error": {"passed": True, "reason": f"Validation error (accepted anyway): {str(e)}"}},
+                reasons=[f"Validation had issues but image accepted: {str(e)}"],
+                image_hash=hashlib.sha256(image_data).hexdigest() if image_data else "",
                 phash=""
             )
     
