@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 # Minimum score threshold for approval (0-100 scale)
 # Lower = more lenient, Higher = stricter
-MINIMUM_SCORE_THRESHOLD = 30  # MVP: Allow images even with missing EXIF/GPS
+MINIMUM_SCORE_THRESHOLD = 20  # Lenient threshold for MVP
 
 async def abuse_decision(issue, image_bytes: bytes | None = None, *, latitude: float, longitude: float) -> bool:
     if not image_bytes:

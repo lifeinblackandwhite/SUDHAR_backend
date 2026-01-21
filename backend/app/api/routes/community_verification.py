@@ -14,8 +14,8 @@ router = APIRouter(prefix="/community", tags=["Community"])
 VERIFY_UPLOAD_DIR = "/code/uploads/verifications"
 os.makedirs(VERIFY_UPLOAD_DIR, exist_ok=True)
 
-# Community verification threshold
-VERIFICATION_THRESHOLD = 2
+# Community verification threshold - issue stays in feed until this many verifications
+VERIFICATION_THRESHOLD = 10
 
 
 @router.post("/verify/{issue_id}")

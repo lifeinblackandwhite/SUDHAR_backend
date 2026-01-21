@@ -10,10 +10,12 @@ ISSUE_TRANSITIONS = {
         IssueState.VERIFIED,
         IssueState.AUTO_REJECTED,
         IssueState.COMMUNITY_REVIEW,
+        IssueState.IN_PROGRESS,  # Official override - skip community verification
     },
     IssueState.VERIFIED: {
         IssueState.RANKED,
         IssueState.ASSIGNED,
+        IssueState.IN_PROGRESS,  # Official can directly start work
     },
     IssueState.ASSIGNED: {
         IssueState.IN_PROGRESS,
@@ -26,6 +28,7 @@ ISSUE_TRANSITIONS = {
     },
     IssueState.RANKED: {
         IssueState.ASSIGNED,
+        IssueState.IN_PROGRESS,  # Official can directly start work
     },
     IssueState.COMMUNITY_REVIEW: {
         IssueState.VERIFIED,
@@ -36,4 +39,5 @@ ISSUE_TRANSITIONS = {
 
 def is_valid_transition(current, next_):
     return next_ in ISSUE_TRANSITIONS.get(current, set())
+
 

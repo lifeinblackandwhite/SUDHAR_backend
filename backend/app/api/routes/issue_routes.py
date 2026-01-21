@@ -30,6 +30,7 @@ async def upload_issue(
     pincode: str = Form(...),
     latitude: float = Form(...),
     longitude: float = Form(...),
+    user_id: str = Form(None),  # Firebase UID from Flutter
     images: list[UploadFile] | None = File(None),
     db: AsyncSession = Depends(get_db)
 ):
@@ -42,6 +43,7 @@ async def upload_issue(
     # 2️⃣ Create Issue (SUBMITTED)
     # --------------------------------------------------
     issue = Issue(
+        user_id=user_id,  # Link to reporter's Firebase UID
         title=title,
         description=description,
         category=category,
